@@ -1,0 +1,12 @@
+{
+  "name": "jira-sprint-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "A live, read-only Copilot canvas dashboard for Jira issues in currently open sprints.",
+  "main": "extension.mjs",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "jira-sprint-dashboard",
+  "description": "A live, read-only Copilot canvas dashboard for Jira issues in currently open sprints.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Atlassian",
+    "url": "https://github.com/atlassian/atlassian-mcp-server/"
+  },
+  "extensions": {
+    "com.github.copilot": {
+      "logo": "assets/preview.png"
+    },
+    "com.github.atlassian-github-marketplace": {
+      "extensions": [
+        "./extensions/jira-sprint-dashboard"
+      ]
+    }
+  },
+  "license": "Apache-2.0",
+  "keywords": ["jira", "canvas", "dashboard", "sprint", "atlassian", "copilot", "marketplace", "plugins"]
+}

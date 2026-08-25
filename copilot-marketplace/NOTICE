@@ -1,0 +1,73 @@
+Atlassian Github Copilot Marketplace
+Copyright 2026 Atlassian
+
+This source tree is a generic library for Atlassian GitHub Copilot
+marketplace listings and plugins (canvas extensions and related CLI
+plugin packages). It is not a single-product codebase. Individual
+plugins (for example jira-sprint-dashboard) live under plugins/ and
+extensions/ and may be added over time.
+
+This product is licensed under the Apache License, Version 2.0. See the
+LICENSE file in this directory for the full license text.
+
+This NOTICE file lists third-party and runtime software used by this
+library. This source tree does not vendor npm packages; plugin
+package.json files have no "dependencies" key.
+
+------------------------------------------------------------------------------
+Third-party / runtime software
+------------------------------------------------------------------------------
+
+Node.js
+  SPDX: MIT
+  Copyright Node.js contributors
+  https://nodejs.org/
+  https://github.com/nodejs/node/blob/main/LICENSE
+
+  This library imports the following Node.js builtin modules (not vendored):
+
+  Runtime
+    node:http            — extensions/extension.mjs
+
+  Tests
+    node:assert/strict   — extensions/tests/dashboard.test.mjs
+                           extensions/tests/jira-client.test.mjs
+                           extensions/tests/start-copilot.test.mjs
+    node:test            — extensions/tests/dashboard.test.mjs
+                           extensions/tests/jira-client.test.mjs
+                           extensions/tests/start-copilot.test.mjs
+
+@github/copilot-sdk (subpath @github/copilot-sdk/extension)
+  SPDX: MIT  (npm registry, @github/copilot-sdk@1.0.11)
+  Copyright GitHub, Inc.
+  https://www.npmjs.com/package/@github/copilot-sdk
+  https://github.com/github/copilot-sdk
+
+  Peer / runtime dependency provided by GitHub Copilot CLI. It is NOT
+  vendored and is NOT shipped in this source tree. Copilot canvas
+  plugins in this library import it at runtime.
+  Imported from: extensions/extension.mjs
+    createCanvas, CanvasError, joinSession
+
+------------------------------------------------------------------------------
+Import audit (public/**/*.mjs)
+------------------------------------------------------------------------------
+
+External modules found via import/require:
+
+  node:http
+  node:assert/strict
+  node:test
+  @github/copilot-sdk/extension
+
+First-party modules in this tree (not third-party):
+
+  ./server/jira-client.mjs
+  ./ui/dashboard.mjs
+  ./server/start-copilot.mjs
+  ../server/jira-client.mjs
+  ../server/start-copilot.mjs
+  ../ui/dashboard.mjs
+
+No other third-party modules are imported. No additional npm packages
+are declared or shipped.
