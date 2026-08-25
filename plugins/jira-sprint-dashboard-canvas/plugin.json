@@ -5,13 +5,13 @@
   "version": "1.0.0",
   "author": {
     "name": "Atlassian",
-    "url": "https://github.com/atlassian/atlassian-mcp-server/"
+    "url": "https://github.com/atlassian-labs/copilot-marketplace"
   },
   "extensions": {
     "com.github.copilot": {
       "logo": "assets/preview.png"
     },
-    "com.github.atlassian-github-marketplace": {
+    "com.github.atlassian-copilot-marketplace": {
       "extensions": [
         "./extensions/jira-sprint-dashboard-canvas"
       ]

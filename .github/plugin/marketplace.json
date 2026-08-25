@@ -1,5 +1,5 @@
 {
-    "name": "atlassian-github-marketplace",
+    "name": "atlassian-copilot-marketplace",
     "owner": {
       "name": "Atlassian",
       "email": "support@atlassian.com"
@@ -13,7 +13,7 @@
         "name": "jira-sprint-dashboard-canvas",
         "description": "A live, read-only Copilot canvas dashboard for Jira issues in currently open sprints.",
         "version": "1.0.0",
-        "source": "./plugins/jira-sprint-dashboard-canvas"
+        "source": "plugins/jira-sprint-dashboard-canvas"
       }
     ]
   }
