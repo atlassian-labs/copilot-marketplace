@@ -1,0 +1,73 @@
+name: 🐞 Bug report
+description: "Something wrong in this repo: plugins, canvas extensions, marketplace listing, or docs."
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+
+        This is the right place for problems with what lives in this repo: marketplace listings (`.github/plugin/marketplace.json`), plugin packages under `plugins/`, canvas source under `extensions/`, and the README/docs.
+
+        Two things worth knowing first:
+
+        - We don't watch this repo full time, so we can't promise a reply by a set date. If you're blocked or need an answer soon, [Atlassian Support](https://support.atlassian.com/) and the [Atlassian Community](https://community.atlassian.com/) are staffed and usually quicker.
+        - If the bug is in Jira itself, GitHub Copilot, or another Atlassian product, Support is the better route. Not sure which it is? File here anyway and we'll point you the right way.
+  - type: checkboxes
+    id: dedup
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - README / documentation
+        - Marketplace listing (marketplace.json / plugin.json)
+        - Canvas extension (extensions/)
+        - Plugin package (plugins/)
+        - CI / tests
+        - Not sure / other
+    validations:
+      required: true
+  - type: input
+    id: plugin-name
+    attributes:
+      label: Plugin name (if it's about a plugin)
+      placeholder: e.g. jira-sprint-dashboard
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Tell us what's wrong and where you ran into it.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: If you can, list the steps and paste any error output.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+  - type: input
+    id: client
+    attributes:
+      label: Copilot / CLI version (if it's relevant)
+      placeholder: e.g. GitHub Copilot CLI, VS Code Copilot
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Links, screenshots, or anything else that helps.

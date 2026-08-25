@@ -1,0 +1,20 @@
+{
+    "name": "atlassian-github-marketplace",
+    "owner": {
+      "name": "Atlassian",
+      "email": "support@atlassian.com"
+    },
+    "metadata": {
+      "description": "Generic Atlassian library of GitHub Copilot marketplace listings and plugins (canvas extensions and related CLI plugin packages).",
+      "version": "1.0.0"
+    },
+    "plugins": [
+      {
+        "name": "jira-sprint-dashboard-canvas",
+        "description": "A live, read-only Copilot canvas dashboard for Jira issues in currently open sprints.",
+        "version": "1.0.0",
+        "source": "./plugins/jira-sprint-dashboard-canvas"
+      }
+    ]
+  }
+  

@@ -191,7 +191,7 @@ async function closeInstance(instanceId) {
 }
 
 const dashboardCanvas = createCanvas({
-    id: "jira-sprint-dashboard",
+    id: "jira-sprint-dashboard-canvas",
     displayName: "Jira Sprint Dashboard",
     description: "A live, read-only dashboard for Jira issues in currently open sprints.",
     inputSchema: {
