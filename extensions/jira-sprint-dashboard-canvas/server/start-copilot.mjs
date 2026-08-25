@@ -1,4 +1,5 @@
 const ISSUE_KEY_PATTERN = /^[A-Z][A-Z0-9_]*-\d+$/;
+const MAX_SESSION_NAME_LENGTH = 40;
 
 export class StartCopilotError extends Error {
     constructor(code, publicMessage, cause) {
@@ -64,6 +65,27 @@ function jiraIssueUrl(siteUrl, issueKey) {
     }
 }
 
+function normalizeProjectId(value) {
+    return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeSessionId(value) {
+    return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeInstanceId(value) {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    return /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(normalized) ? normalized : "";
+}
+
+function buildSessionName(issue) {
+    const base = `${issue.key} ${issue.summary}`.replace(/\s+/g, " ").trim();
+    if (base.length <= MAX_SESSION_NAME_LENGTH) return base;
+    const maxSummaryLength = Math.max(0, MAX_SESSION_NAME_LENGTH - issue.key.length - 1);
+    const summary = issue.summary.slice(0, maxSummaryLength).trimEnd();
+    return summary ? `${issue.key} ${summary}` : issue.key;
+}
+
 export function buildCopilotPrompt(issue, siteUrl) {
     const links = issue.links.length
         ? issue.links
@@ -97,7 +119,58 @@ export function buildCopilotPrompt(issue, siteUrl) {
     ].join("\n");
 }
 
-export async function startCopilotForIssue(session, entry, requestedIssueKey) {
+export function buildNestedSessionPrompt(issue, kickoffPrompt, options = {}) {
+    const projectId = normalizeProjectId(options?.projectId);
+    const instanceId = normalizeInstanceId(options?.instanceId);
+    const sessionName = buildSessionName(issue);
+    const lines = [
+        `Create a nested project session for ${issue.key}.`,
+        "",
+        "Call create_session with:",
+    ];
+
+    if (projectId) {
+        lines.push(`- project_id: ${JSON.stringify(projectId)}`);
+    } else {
+        lines.push("- project_id: resolve it from list_projects for the active repository, then pass it to create_session");
+    }
+
+    lines.push(
+        `- name: ${JSON.stringify(sessionName)}`,
+        "- coordinate_with_creator: true",
+        "- notify_on_idle: \"once\"",
+        "- kickoff.mode: \"autopilot\"",
+        `- kickoff.prompt: ${JSON.stringify(kickoffPrompt)}`,
+        "",
+        "Use create_session as the execution path.",
+        "After creation, call the canvas action \"attach_session\" with the issue key and returned session ID.",
+    );
+
+    if (instanceId) {
+        lines.push(
+            `Call invoke_canvas_action with instanceId ${JSON.stringify(instanceId)}, actionName "attach_session", and input ${JSON.stringify({ issueKey: issue.key, sessionId: "<returned-session-id>" })}.`,
+        );
+    } else {
+        lines.push(
+            `Call invoke_canvas_action with the active dashboard instanceId, actionName "attach_session", and input ${JSON.stringify({ issueKey: issue.key, sessionId: "<returned-session-id>" })}.`,
+        );
+    }
+
+    return lines.join("\n");
+}
+
+export function buildOpenSessionPrompt(issueKey, sessionId) {
+    return [
+        `Open the existing Copilot project session already attached to ${issueKey}.`,
+        "",
+        "Call navigate_to with:",
+        `- id: ${JSON.stringify(sessionId)}`,
+        "",
+        "Use navigate_to as the execution path.",
+    ].join("\n");
+}
+
+export async function startCopilotForIssue(session, entry, requestedIssueKey, options = {}) {
     const issueKey = normalizeIssueKey(requestedIssueKey);
     if (!issueKey) {
         throw new StartCopilotError(
@@ -115,50 +188,82 @@ export async function startCopilotForIssue(session, entry, requestedIssueKey) {
     }
 
     const issue = summarizeIssue(modelIssue);
-    const prompt = buildCopilotPrompt(issue, entry?.identifiers?.siteUrl);
-    const startAgent = session?.rpc?.tasks?.startAgent;
+    const kickoffPrompt = buildCopilotPrompt(issue, entry?.identifiers?.siteUrl);
+    const prompt = buildNestedSessionPrompt(issue, kickoffPrompt, {
+        projectId: entry?.identifiers?.projectId,
+        instanceId: options?.instanceId,
+    });
+    if (typeof session?.send !== "function") {
+        throw new StartCopilotError(
+            "jira_start_with_copilot_unsupported",
+            "This Copilot runtime cannot start work from the dashboard.",
+        );
+    }
+    try {
+        await session.send({ prompt });
+        const projectId = normalizeProjectId(entry?.identifiers?.projectId);
+        return {
+            issueKey,
+            issueSummary: issue.summary,
+            mode: "nested-session-request",
+            projectId: projectId || null,
+            message: `Queued nested Copilot session setup for ${issueKey}.`,
+        };
+    } catch (error) {
+        throw new StartCopilotError(
+            "jira_start_with_copilot_failed",
+            `Could not start Copilot for ${issueKey}. Try again.`,
+            error,
+        );
+    }
+}
 
-    if (typeof startAgent === "function") {
-        try {
-            await session.rpc.tasks.startAgent({
-                agentType: "general-purpose",
-                name: `jira-${issueKey.toLowerCase()}`,
-                description: `Work on Jira issue ${issueKey}`,
-                prompt,
-            });
-            return {
-                issueKey,
-                issueSummary: issue.summary,
-                mode: "background-agent",
-            };
-        } catch (error) {
-            throw new StartCopilotError(
-                "jira_start_with_copilot_failed",
-                `Could not start Copilot for ${issueKey}. Try again.`,
-                error,
-            );
-        }
+export async function openAttachedSession(session, entry, requestedIssueKey) {
+    const issueKey = normalizeIssueKey(requestedIssueKey);
+    if (!issueKey) {
+        throw new StartCopilotError(
+            "jira_issue_key_invalid",
+            "A valid Jira issue key is required.",
+        );
     }
 
-    if (typeof session?.send === "function") {
-        try {
-            await session.send({ prompt });
-            return {
-                issueKey,
-                issueSummary: issue.summary,
-                mode: "current-session",
-            };
-        } catch (error) {
-            throw new StartCopilotError(
-                "jira_start_with_copilot_failed",
-                `Could not start Copilot for ${issueKey}. Try again.`,
-                error,
-            );
-        }
+    const modelIssue = issueFromModel(entry?.model, issueKey);
+    if (!modelIssue) {
+        throw new StartCopilotError(
+            "jira_issue_not_in_dashboard",
+            "The selected Jira issue is no longer present in this dashboard. Refresh and try again.",
+        );
     }
 
-    throw new StartCopilotError(
-        "jira_start_with_copilot_unsupported",
-        "This Copilot runtime cannot start work from the dashboard.",
-    );
+    const sessionId = normalizeSessionId(modelIssue?.copilotSessionId);
+    if (!sessionId) {
+        throw new StartCopilotError(
+            "jira_issue_session_not_attached",
+            "No Copilot session is attached to this issue yet.",
+        );
+    }
+
+    const prompt = buildOpenSessionPrompt(issueKey, sessionId);
+    if (typeof session?.send !== "function") {
+        throw new StartCopilotError(
+            "jira_open_attached_session_unsupported",
+            "This Copilot runtime cannot open attached sessions from the dashboard.",
+        );
+    }
+
+    try {
+        await session.send({ prompt });
+        return {
+            issueKey,
+            sessionId,
+            mode: "open-attached-session-request",
+            message: `Queued session navigation for ${issueKey}.`,
+        };
+    } catch (error) {
+        throw new StartCopilotError(
+            "jira_open_attached_session_failed",
+            `Could not open the attached session for ${issueKey}. Try again.`,
+            error,
+        );
+    }
 }
