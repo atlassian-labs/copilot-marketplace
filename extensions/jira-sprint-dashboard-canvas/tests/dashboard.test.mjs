@@ -80,7 +80,27 @@ test("renders risk and attention as an accessible linked table", () => {
     assert.match(html, /<th>Evidence and next question<\/th>/);
     assert.match(html, /class="issue-key"/);
     assert.match(html, /class="start-copilot-btn"/);
-    assert.match(html, /fetch\('\/start-with-copilot'/);
+    assert.match(html, /data-action="start-with-copilot"/);
+    assert.match(html, /'\/start-with-copilot'/);
     assert.match(html, /text-decoration: underline/);
     assert.doesNotMatch(html, /source appendix|assumptions footer|refresh button/i);
+});
+
+test("renders an Open session action for attached issues", () => {
+    const model = buildDashboardModel(
+        [sampleIssue()],
+        "https://example.atlassian.net",
+        "2026-08-17T00:00:00Z",
+    );
+    model.topWork = model.topWork.map((item) => (
+        item.key === "DASH-1"
+            ? { ...item, copilotSessionId: "session-xyz" }
+            : item
+    ));
+    const html = renderDashboardHtml(model);
+
+    assert.match(html, /data-action="open-session"/);
+    assert.match(html, />Open session<\/button>/);
+    assert.match(html, /'\/open-session'/);
+    assert.doesNotMatch(html, /session-xyz/);
 });

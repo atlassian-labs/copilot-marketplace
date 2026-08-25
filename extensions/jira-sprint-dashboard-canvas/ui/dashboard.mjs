@@ -450,7 +450,14 @@ function issueLink(item) {
 
 function issueActions(item) {
     const key = escapeHtml(item.key);
-    return `<button type="button" class="start-copilot-btn" data-issue-key="${key}" aria-label="Start with Copilot for ${key}">Start with Copilot</button>`;
+    const sessionId = text(item?.copilotSessionId);
+    const hasAttachedSession = Boolean(sessionId);
+    const action = hasAttachedSession ? "open-session" : "start-with-copilot";
+    const buttonLabel = hasAttachedSession ? "Open session" : "Start with Copilot";
+    const buttonAriaLabel = hasAttachedSession
+        ? `Open attached Copilot session for ${item.key}`
+        : `Start with Copilot for ${item.key}`;
+    return `<div class="issue-actions"><button type="button" class="start-copilot-btn" data-issue-key="${key}" data-action="${action}" aria-label="${escapeHtml(buttonAriaLabel)}">${buttonLabel}</button></div>`;
 }
 
 function issueCell(item) {
@@ -668,6 +675,7 @@ export function renderDashboardHtml(model) {
         .issue-key { font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
         .issue-key:hover { text-decoration-thickness: 2px; }
         .issue-cell { display: grid; gap: 7px; align-content: start; justify-items: start; }
+        .issue-actions { display: grid; gap: 5px; align-content: start; justify-items: start; }
         .start-copilot-btn {
             appearance: none;
             border: 1px solid var(--border-color-default, #d0d7de);
@@ -777,28 +785,40 @@ export function renderDashboardHtml(model) {
             const button = target?.closest('.start-copilot-btn');
             if (!button) return;
             const issueKey = (button.getAttribute('data-issue-key') || '').trim();
+            const action = (button.getAttribute('data-action') || 'start-with-copilot').trim().toLowerCase();
+            const isOpenSessionAction = action === 'open-session';
+            const endpoint = isOpenSessionAction ? '/open-session' : '/start-with-copilot';
+            const progressMessage = isOpenSessionAction
+                ? ('Opening session for ' + issueKey + '…')
+                : ('Starting Copilot for ' + issueKey + '…');
+            const defaultErrorMessage = isOpenSessionAction
+                ? ('Could not open the attached session for ' + issueKey + '.')
+                : ('Could not start Copilot for ' + issueKey + '.');
+            const defaultSuccessMessage = isOpenSessionAction
+                ? ('Queued session navigation for ' + issueKey + '.')
+                : ('Queued nested Copilot session setup for ' + issueKey + '.');
             if (!issueKey || pendingIssueKeys.has(issueKey)) return;
 
             pendingIssueKeys.add(issueKey);
             setIssueButtonsDisabled(issueKey, true);
-            setActionStatus('Starting Copilot for ' + issueKey + '…');
+            setActionStatus(progressMessage);
             try {
-                const response = await fetch('/start-with-copilot', {
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ issueKey }),
                 });
                 const payload = await response.json().catch(() => ({}));
                 if (!response.ok || payload.status !== 'success') {
-                    throw new Error(payload.message || ('Could not start Copilot for ' + issueKey + '.'));
+                    throw new Error(payload.message || defaultErrorMessage);
                 }
-                const destination = payload.mode === 'background-agent'
-                    ? ' in a background task.'
-                    : ' in the current session.';
-                setActionStatus('Started Copilot for ' + payload.issueKey + destination);
+                const successMessage = typeof payload.message === 'string' && payload.message.trim()
+                    ? payload.message
+                    : defaultSuccessMessage;
+                setActionStatus(successMessage);
             } catch (error) {
                 setActionStatus(
-                    error?.message || ('Could not start Copilot for ' + issueKey + '.'),
+                    error?.message || defaultErrorMessage,
                     true,
                 );
             } finally {

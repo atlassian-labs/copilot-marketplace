@@ -11,7 +11,9 @@ import {
     renderDashboardHtml,
 } from "./ui/dashboard.mjs";
 import {
+    openAttachedSession,
     StartCopilotError,
+    normalizeIssueKey,
     startCopilotForIssue,
 } from "./server/start-copilot.mjs";
 
@@ -46,6 +48,41 @@ function notifyRefresh(entry) {
     for (const client of entry.eventClients) {
         client.write("data: refresh\n\n");
     }
+}
+
+function normalizeProjectId(value) {
+    return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeSessionId(value) {
+    return typeof value === "string" ? value.trim() : "";
+}
+
+function resolveCanvasIdentifiers(source) {
+    const identifiers = requireCanvasOpenInput(source);
+    const projectId = normalizeProjectId(source?.projectId);
+    return projectId ? { ...identifiers, projectId } : identifiers;
+}
+
+function annotateRowsWithSessions(rows, attachedSessions) {
+    if (!Array.isArray(rows)) return rows;
+    return rows.map((row) => {
+        const issueKey = normalizeIssueKey(row?.key);
+        if (!issueKey) return row;
+        const sessionId = attachedSessions.get(issueKey);
+        return sessionId ? { ...row, copilotSessionId: sessionId } : row;
+    });
+}
+
+function applyAttachedSessions(model, attachedSessions) {
+    if (!model || attachedSessions.size === 0) return model;
+    return {
+        ...model,
+        issues: annotateRowsWithSessions(model.issues, attachedSessions),
+        topWork: annotateRowsWithSessions(model.topWork, attachedSessions),
+        recentCompleted: annotateRowsWithSessions(model.recentCompleted, attachedSessions),
+        risks: annotateRowsWithSessions(model.risks, attachedSessions),
+    };
 }
 
 async function readJsonBody(request) {
@@ -122,6 +159,7 @@ async function startInstanceServer(instanceId) {
                         activeSession,
                         entry,
                         body?.issueKey,
+                        { instanceId },
                     );
                     writeJson(response, 200, { status: "success", ...started });
                 } catch (error) {
@@ -132,6 +170,40 @@ async function startInstanceServer(instanceId) {
                     const clientErrorCodes = new Set([
                         "jira_issue_key_invalid",
                         "jira_issue_not_in_dashboard",
+                        "jira_issue_session_not_attached",
+                        "jira_request_invalid_json",
+                        "jira_request_too_large",
+                    ]);
+                    writeJson(response, clientErrorCodes.has(canvasError.code) ? 400 : 500, {
+                        status: "error",
+                        code: canvasError.code,
+                        message: canvasError.message,
+                    });
+                }
+            })();
+            return;
+        }
+
+        if (request.method === "POST" && requestUrl.pathname === "/open-session") {
+            void (async () => {
+                try {
+                    const body = await readJsonBody(request);
+                    const activeSession = await sessionReady;
+                    const opened = await openAttachedSession(
+                        activeSession,
+                        entry,
+                        body?.issueKey,
+                    );
+                    writeJson(response, 200, { status: "success", ...opened });
+                } catch (error) {
+                    const canvasError = publicCanvasError(
+                        error,
+                        "jira_open_attached_session_failed",
+                    );
+                    const clientErrorCodes = new Set([
+                        "jira_issue_key_invalid",
+                        "jira_issue_not_in_dashboard",
+                        "jira_issue_session_not_attached",
                         "jira_request_invalid_json",
                         "jira_request_too_large",
                     ]);
@@ -176,9 +248,10 @@ async function loadFreshModel(identifiers) {
 
 async function refreshEntry(entry) {
     const model = await loadFreshModel(entry.identifiers);
-    entry.model = model;
+    if (!entry.attachedSessions) entry.attachedSessions = new Map();
+    entry.model = applyAttachedSessions(model, entry.attachedSessions);
     notifyRefresh(entry);
-    return model;
+    return entry.model;
 }
 
 async function closeInstance(instanceId) {
@@ -201,6 +274,7 @@ const dashboardCanvas = createCanvas({
         properties: {
             cloudId: { type: "string", minLength: 1 },
             siteUrl: { type: "string", pattern: "^https://" },
+            projectId: { type: "string", minLength: 1 },
         },
     },
     actions: [
@@ -239,26 +313,91 @@ const dashboardCanvas = createCanvas({
                 }
             },
         },
+        {
+            name: "attach_session",
+            description: "Attach a created Copilot session to a Jira issue row in this dashboard.",
+            inputSchema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["issueKey", "sessionId"],
+                properties: {
+                    issueKey: { type: "string", minLength: 1 },
+                    sessionId: { type: "string", minLength: 1 },
+                },
+            },
+            handler: async (context) => {
+                const entry = instances.get(context.instanceId);
+                if (!entry) {
+                    throw new CanvasError(
+                        "jira_canvas_instance_not_found",
+                        "Open the Jira sprint dashboard before attaching sessions.",
+                    );
+                }
+
+                const issueKey = normalizeIssueKey(context.input?.issueKey);
+                if (!issueKey) {
+                    throw new CanvasError(
+                        "jira_issue_key_invalid",
+                        "A valid Jira issue key is required.",
+                    );
+                }
+
+                const sessionId = normalizeSessionId(context.input?.sessionId);
+                if (!sessionId) {
+                    throw new CanvasError(
+                        "jira_session_id_invalid",
+                        "A valid Copilot session ID is required.",
+                    );
+                }
+
+                const issues = Array.isArray(entry.model?.issues) ? entry.model.issues : [];
+                const inDashboard = issues.some((issue) => normalizeIssueKey(issue?.key) === issueKey);
+                if (!inDashboard) {
+                    throw new CanvasError(
+                        "jira_issue_not_in_dashboard",
+                        "The selected Jira issue is no longer present in this dashboard. Refresh and try again.",
+                    );
+                }
+
+                if (!entry.attachedSessions) entry.attachedSessions = new Map();
+                entry.attachedSessions.set(issueKey, sessionId);
+                entry.model = applyAttachedSessions(entry.model, entry.attachedSessions);
+                notifyRefresh(entry);
+
+                return {
+                    status: "success",
+                    issueKey,
+                    sessionId,
+                };
+            },
+        },
     ],
     open: async (context) => {
         const existing = instances.get(context.instanceId);
         let identifiers;
         try {
-            identifiers = requireCanvasOpenInput(context.input);
+            identifiers = resolveCanvasIdentifiers(context.input);
             const model = await loadFreshModel(identifiers);
             let entry = existing;
             if (!entry) {
+                const attachedSessions = new Map();
                 const serverInfo = await startInstanceServer(context.instanceId);
                 entry = {
                     ...serverInfo,
                     identifiers,
-                    model,
+                    model: applyAttachedSessions(model, attachedSessions),
                     eventClients: new Set(),
+                    attachedSessions,
                 };
                 instances.set(context.instanceId, entry);
             } else {
+                if (!entry.attachedSessions) entry.attachedSessions = new Map();
+                const sameSite = entry.identifiers.cloudId === identifiers.cloudId
+                    && entry.identifiers.siteUrl === identifiers.siteUrl
+                    && normalizeProjectId(entry.identifiers.projectId) === normalizeProjectId(identifiers.projectId);
+                if (!sameSite) entry.attachedSessions.clear();
                 entry.identifiers = identifiers;
-                entry.model = model;
+                entry.model = applyAttachedSessions(model, entry.attachedSessions);
                 notifyRefresh(entry);
             }
             return {
@@ -270,7 +409,8 @@ const dashboardCanvas = createCanvas({
             const isSameSite = existing
                 && identifiers
                 && existing.identifiers.cloudId === identifiers.cloudId
-                && existing.identifiers.siteUrl === identifiers.siteUrl;
+                && existing.identifiers.siteUrl === identifiers.siteUrl
+                && normalizeProjectId(existing.identifiers.projectId) === normalizeProjectId(identifiers.projectId);
             if (isSameSite) {
                 existing.model = markDashboardStale(existing.model);
                 notifyRefresh(existing);

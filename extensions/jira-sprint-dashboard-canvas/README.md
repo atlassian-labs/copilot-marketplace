@@ -10,7 +10,7 @@ load, attention items, top-priority work, and recently completed work.
 | --- | --- |
 | [`extension.mjs`](extension.mjs) | Registers the canvas and refresh action, owns per-instance state, and runs one loopback HTTP server per open canvas. |
 | [`server/jira-client.mjs`](server/jira-client.mjs) | Discovers Jira MCP capabilities, performs complete cursor pagination, and reads authoritative tool content. |
-| [`server/start-copilot.mjs`](server/start-copilot.mjs) | Builds a bounded prompt from the allowlisted dashboard issue model and starts Copilot work for a selected issue. |
+| [`server/start-copilot.mjs`](server/start-copilot.mjs) | Builds bounded prompts that ask the main Copilot thread to either create a nested project session or open an attached one. |
 | [`ui/dashboard.mjs`](ui/dashboard.mjs) | Normalizes the allowlisted Jira display model and renders the responsive dashboard HTML. |
 | [`tests/`](tests/) | Verifies MCP pagination/content handling, model privacy, URL validation, and dashboard rendering. |
 
@@ -59,10 +59,15 @@ visible Jira facts come from the live post-open fetch.
 - `refresh_dashboard` refreshes Jira through the same fetch and normalization
   path used during open. On failure it reports a non-success result and keeps
   the last successful dashboard visible with a stale-data notice.
+- `attach_session` links a created nested Copilot session ID back to a Jira row
+  so the dashboard can show which issue already has a spawned session.
 
 The issue tables also expose a **Start with Copilot** button. It starts a
-background Copilot task when supported, with a current-session fallback for
-runtimes that do not expose background tasks. It does not perform a Jira write.
+nested project-session request via the main Copilot thread using
+`create_session` and then asks that thread to call `attach_session` with the
+new session ID. Once an issue has an attached session, that control switches to
+**Open session** and queues a `navigate_to` request for the attached session ID.
+Neither action performs a Jira write.
 
 ## Validation
 
