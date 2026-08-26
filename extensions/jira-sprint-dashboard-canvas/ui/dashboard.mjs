@@ -394,7 +394,7 @@ export function buildDashboardModel(rawIssues, siteUrl, fetchedAt, partial = fal
         schemaVersion: 1,
         context: {
             title: "Jira sprint dashboard",
-            scopeLabel: "All visible issues in currently open sprints",
+            scopeLabel: "All visible work items in currently open sprints",
             site: hostname,
             projectCount: projects.length,
             sprintNames: sprints,
