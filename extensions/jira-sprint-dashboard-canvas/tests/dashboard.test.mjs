@@ -49,6 +49,7 @@ test("builds an allowlisted four-stat renderer model", () => {
     const serialized = JSON.stringify(model);
 
     assert.equal(model.stats.length, 4);
+    assert.equal(model.context.scopeLabel, "All visible work items in currently open sprints");
     assert.equal(model.issues.length, 1);
     assert.equal(
         model.issues[0].url,
