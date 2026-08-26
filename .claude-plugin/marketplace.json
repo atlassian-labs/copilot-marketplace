@@ -13,7 +13,15 @@
         "name": "jira-sprint-dashboard-canvas",
         "description": "A live, read-only Copilot canvas dashboard for Jira issues in currently open sprints.",
         "version": "1.0.0",
-        "source": "plugins/jira-sprint-dashboard-canvas"
+        "author": {
+          "name": "Atlassian",
+          "url": "https://github.com/atlassian-labs/copilot-marketplace"
+        },
+        "repository": "https://github.com/atlassian-labs/copilot-marketplace",
+        "homepage": "https://github.com/atlassian-labs/copilot-marketplace",
+        "source": "./",
+        "license": "Apache-2.0",
+        "keywords": ["jira", "canvas", "dashboard", "sprint", "atlassian", "copilot", "marketplace", "plugins"]
       }
     ]
   }

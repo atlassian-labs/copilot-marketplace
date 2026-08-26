@@ -1,5 +1,4 @@
 {
-  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "jira-sprint-dashboard-canvas",
   "description": "A live, read-only Copilot canvas dashboard for Jira issues in currently open sprints.",
   "version": "1.0.0",
@@ -7,16 +6,8 @@
     "name": "Atlassian",
     "url": "https://github.com/atlassian-labs/copilot-marketplace"
   },
-  "extensions": {
-    "com.github.copilot": {
-      "logo": "assets/preview.png"
-    },
-    "com.github.atlassian-copilot-marketplace": {
-      "extensions": [
-        "./extensions/jira-sprint-dashboard-canvas"
-      ]
-    }
-  },
+  "extensions": "extensions",
   "license": "Apache-2.0",
+  "logo": "assets/logo.svg",
   "keywords": ["jira", "canvas", "dashboard", "sprint", "atlassian", "copilot", "marketplace", "plugins"]
 }
