@@ -429,7 +429,6 @@ const dashboardCanvas = createCanvas({
 });
 
 const session = await joinSession({
-    enableMcpApps: true,
     canvases: [dashboardCanvas],
 });
 resolveSessionReady(session);

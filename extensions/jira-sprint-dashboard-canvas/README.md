@@ -40,6 +40,13 @@ statistics followed by supported charts, owner load, risk and attention,
 highest-priority work, and recently completed work. Jira keys are visibly
 underlined links validated against the selected Jira site.
 
+## Compatibility
+
+Requires a canvas-capable Copilot host with `tools.getCurrentMetadata` and
+`tools.execute`, plus a connected Atlassian MCP server offering
+`searchJiraIssuesUsingJql`. Verified with desktop `1.1.17` and runtime `1.0.83`.
+The Inline MCP Apps experiment and `COPILOT_MCP_APPS` are not required.
+
 ## Open input
 
 The canvas requires a resolved Jira site at its open boundary:
