@@ -53,36 +53,39 @@ export function requireCanvasOpenInput(source) {
     return { cloudId, siteUrl };
 }
 
-function toolName(tool) {
-    return typeof tool?.name === "string" ? tool.name : "";
-}
-
 function selectSearchTool(tools) {
-    const list = Array.isArray(tools) ? tools : [];
-    const canonical = SEARCH_TOOL.toLowerCase();
-    const exact = list.find((tool) => toolName(tool) === SEARCH_TOOL);
-    if (exact) return toolName(exact);
-
-    const namespaced = list.find((tool) => {
-        const name = toolName(tool).toLowerCase();
-        return name !== canonical && name.endsWith(canonical);
-    });
-    if (namespaced) return toolName(namespaced);
-
-    const described = list.find((tool) => {
-        const description = typeof tool?.description === "string"
-            ? tool.description.toLowerCase()
-            : "";
-        return description.includes("jira")
-            && description.includes("jql")
-            && (description.includes("search") || description.includes("issue"));
-    });
-    return described ? toolName(described) : "";
+    return tools?.find((tool) => tool.mcpToolName === SEARCH_TOOL)?.name ?? "";
 }
 
 async function discoverSearchMapping(session) {
     if (cachedSearchMapping) return cachedSearchMapping;
 
+    const tools = session.rpc.tools;
+
+    let searchToolName;
+    try {
+        let metadata = await tools.getCurrentMetadata();
+        searchToolName = selectSearchTool(metadata?.tools);
+        if (!searchToolName && typeof tools.initializeAndValidate === "function") {
+            // Canvas rehydration can run before the session's first agent turn.
+            await tools.initializeAndValidate();
+            metadata = await tools.getCurrentMetadata();
+            searchToolName = selectSearchTool(metadata?.tools);
+        }
+    } catch (error) {
+        throw new JiraDashboardError(
+            "jira_tool_discovery_failed",
+            "Copilot could not load the session's Jira tools. Reopen the session and try again.",
+            error,
+        );
+    }
+
+    if (searchToolName) {
+        cachedSearchMapping = { searchToolName };
+        return cachedSearchMapping;
+    }
+
+    // MCP connection state is only used to explain missing session tools.
     let listing;
     try {
         listing = await session.rpc.mcp.list();
@@ -96,29 +99,7 @@ async function discoverSearchMapping(session) {
 
     const servers = Array.isArray(listing?.servers) ? listing.servers : [];
     const needsAuth = servers.some((server) => server?.status === "needs-auth");
-    const connected = servers
-        .filter((server) => server?.status === "connected" && typeof server?.name === "string")
-        .sort((left, right) => {
-            const leftPreferred = /atlassian/i.test(left.name) ? 0 : 1;
-            const rightPreferred = /atlassian/i.test(right.name) ? 0 : 1;
-            return leftPreferred - rightPreferred;
-        });
-
-    for (const server of connected) {
-        try {
-            const result = await session.rpc.mcp.listTools({ serverName: server.name });
-            const searchToolName = selectSearchTool(result?.tools);
-            if (searchToolName) {
-                cachedSearchMapping = {
-                    serverName: server.name,
-                    searchToolName,
-                };
-                return cachedSearchMapping;
-            }
-        } catch {
-            // Continue inspecting other connected servers.
-        }
-    }
+    const connected = servers.filter((server) => server?.status === "connected");
 
     if (needsAuth) {
         throw new JiraDashboardError(
@@ -134,7 +115,7 @@ async function discoverSearchMapping(session) {
     }
     throw new JiraDashboardError(
         "jira_search_tool_not_found",
-        "The connected MCP servers do not expose Jira JQL search.",
+        "Jira JQL search is not available in this Copilot session. Enable the Jira search tool and reopen the dashboard.",
     );
 }
 
@@ -143,6 +124,8 @@ function mappingMayBeStale(error) {
     return message.includes("not connected")
         || message.includes("unknown tool")
         || message.includes("tool not found")
+        || message.includes("not in the current tool")
+        || message.includes("not in the offered tool")
         || message.includes("server not found")
         || message.includes("no such tool");
 }
@@ -150,12 +133,14 @@ function mappingMayBeStale(error) {
 async function callSearchTool(session, argumentsValue, mayRediscover = true) {
     const mapping = await discoverSearchMapping(session);
     try {
-        return await session.rpc.mcp.apps.callTool({
-            serverName: mapping.serverName,
-            originServerName: mapping.serverName,
-            toolName: mapping.searchToolName,
+        const result = await session.rpc.tools.execute({
+            name: mapping.searchToolName,
             arguments: argumentsValue,
         });
+        if (typeof result !== "string" && result?.resultType !== "success") {
+            throw new Error(result?.error || result?.textResultForLlm || "Invalid tool execution result");
+        }
+        return result;
     } catch (error) {
         if (mayRediscover && mappingMayBeStale(error)) {
             cachedSearchMapping = null;
@@ -190,20 +175,17 @@ function parseJsonText(value) {
 }
 
 function unwrapToolContent(result) {
-    if (result?.isError) {
-        throw new JiraDashboardError(
-            "jira_search_failed",
-            "Jira search returned an error. Check access and try again.",
-        );
-    }
+    // tools.execute returns ToolResult, not an MCP CallToolResult. Only use
+    // model-facing text; structuredContent can contain a separate UI model.
+    const textResult = typeof result === "string" ? result : result?.textResultForLlm;
+    const parsedText = parseJsonText(textResult);
+    if (parsedText && typeof parsedText === "object") return parsedText;
 
     const payloads = [];
-    for (const part of Array.isArray(result?.content) ? result.content : []) {
-        if (part?.json && typeof part.json === "object") {
-            payloads.push(part.json);
-        } else if (typeof part?.text === "string") {
+    for (const part of Array.isArray(result?.contents) ? result.contents : []) {
+        if (part?.type === "text" && typeof part?.text === "string") {
             const parsed = parseJsonText(part.text);
-            if (typeof parsed !== "string") payloads.push(parsed);
+            if (parsed && typeof parsed === "object") payloads.push(parsed);
         }
     }
 
@@ -228,7 +210,7 @@ function unwrapToolContent(result) {
 }
 
 function firstArray(...values) {
-    return values.find(Array.isArray) ?? [];
+    return values.find(Array.isArray);
 }
 
 function extractSearchPage(payload) {
@@ -243,6 +225,12 @@ function extractSearchPage(payload) {
         payload?.result?.items,
         Array.isArray(payload) ? payload : undefined,
     );
+    if (!issues) {
+        throw new JiraDashboardError(
+            "jira_payload_invalid",
+            "Jira returned data in an unsupported format.",
+        );
+    }
     const pageInfo = payload?.issues?.pageInfo ?? payload?.pageInfo ?? {};
     const token = payload?.nextPageToken
         ?? (pageInfo?.hasNextPage ? pageInfo?.endCursor : undefined);
