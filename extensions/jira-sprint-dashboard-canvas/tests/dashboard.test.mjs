@@ -40,6 +40,24 @@ function sampleIssue(overrides = {}) {
     };
 }
 
+test("reuses parsed issue timestamps for derived ages and due distance", () => {
+    const model = buildDashboardModel(
+        [sampleIssue({
+            created: "2026-08-01T00:00:00Z",
+            updated: "2026-08-10T00:00:00Z",
+            resolutiondate: "2026-08-12T00:00:00Z",
+            duedate: "2026-08-18",
+        })],
+        "https://example.atlassian.net",
+        "2026-08-17T00:00:00Z",
+    );
+
+    const issue = model.issues[0];
+    assert.equal(issue.createdAge, 16);
+    assert.equal(issue.updatedAge, 7);
+    assert.equal(issue.resolutionAge, 5);
+    assert.equal(issue.dueDistance, 2);
+});
 test("builds an allowlisted four-stat renderer model", () => {
     const model = buildDashboardModel(
         [sampleIssue()],

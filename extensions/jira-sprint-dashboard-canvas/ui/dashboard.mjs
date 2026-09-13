@@ -17,13 +17,11 @@ function parseDate(value, endOfDate = false) {
     return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-function ageInDays(value, now) {
-    const timestamp = parseDate(value);
+function ageInDays(timestamp, now) {
     return timestamp === null ? null : Math.max(0, Math.floor((now - timestamp) / DAY_MS));
 }
 
-function dueInDays(value, now) {
-    const timestamp = parseDate(value, true);
+function dueInDays(timestamp, now) {
     return timestamp === null ? null : Math.ceil((timestamp - now) / DAY_MS);
 }
 
@@ -118,10 +116,14 @@ function normalizeIssue(issue, siteUrl, now) {
             : fields?.assignee?.active === false ? "inactive" : "unknown"
         : "unassigned";
     const category = statusCategory(fields);
-    const updatedAge = ageInDays(fields?.updated, now);
-    const createdAge = ageInDays(fields?.created, now);
-    const resolutionAge = ageInDays(fields?.resolutiondate, now);
-    const dueDistance = dueInDays(fields?.duedate, now);
+    const updatedTimestamp = parseDate(fields?.updated);
+    const createdTimestamp = parseDate(fields?.created);
+    const resolutionTimestamp = parseDate(fields?.resolutiondate);
+    const dueTimestamp = parseDate(fields?.duedate, true);
+    const updatedAge = ageInDays(updatedTimestamp, now);
+    const createdAge = ageInDays(createdTimestamp, now);
+    const resolutionAge = ageInDays(resolutionTimestamp, now);
+    const dueDistance = dueInDays(dueTimestamp, now);
     const labels = normalizeNamedList(fields?.labels);
     const components = normalizeNamedList(fields?.components);
     const versions = normalizeNamedList(fields?.fixVersions);
